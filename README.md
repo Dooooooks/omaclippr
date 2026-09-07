@@ -34,17 +34,38 @@ omarchy plugin add https://github.com/Dooooooks/omaclippr.git --enable
 | **Clip Now** (in panel) | Save the active rolling buffer |
 | **Edit** (clip row) | Open the clip in Omacut |
 
-### Global hotkey
+### Global hotkeys
 
-The clip trigger is a plain CLI, so you can bind it in Hyprland (or any WM)
-independently of the panel:
+The clip and buffer controls are plain CLI flags, so you can bind them in
+Hyprland (or any WM) independently of the panel.
+
+Bind the buffer toggle to `SUPER + ALT + R` and the clip trigger to `SUPER + R`:
 
 ```ini
-# ~/.config/hypr/bindings.lua — save the active buffer
-bind = SUPER, C, exec, ~/.config/omarchy/plugins/dooooooks.omaclippr/bin/omaclippr --clip
+# ~/.config/hypr/bindings.lua
+bind = SUPER ALT, R, exec, ~/.config/omarchy/plugins/dooooooks.omaclippr/bin/omaclippr --toggle  # start/stop buffering
+bind = SUPER, R, exec, ~/.config/omarchy/plugins/dooooooks.omaclippr/bin/omaclippr --clip        # save the active buffer
 ```
 
-Other CLI flags: `--start`, `--stop`, `--toggle`.
+Other CLI flags: `--start`, `--stop`.
+
+## Memory usage while buffering
+
+The buffer is a fixed-length RAM ring, so memory is a hard ceiling that never
+grows with uptime. Approximate footprint (encoded ring only, from
+`duration × bitrate`):
+
+| Quality | Bitrate | 30s buffer | 60s buffer | 120s buffer |
+|---------|---------|-----------|-----------|-------------|
+| Low (720p30) | ~4 Mbps | ~15 MB | ~30 MB | ~60 MB |
+| Balanced (1080p60) | ~9 Mbps | ~34 MB | ~67 MB | ~135 MB |
+| High (native 60) | ~18 Mbps | ~67 MB | ~135 MB | ~270 MB |
+
+Add roughly **50–100 MB** of encoder/GPU-staging overhead to any figure above,
+so the default (Balanced / 60s) typically lands around **120–170 MB** total.
+The exact number varies with codec choice, motion, and driver, but the buffer
+itself is strictly bounded — leaving it on for a day costs the same as the
+first minute.
 
 ## Configure
 
