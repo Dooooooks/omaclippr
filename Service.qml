@@ -28,7 +28,15 @@ Item {
   property bool active: false
   property int duration: 60
   property string quality: "balanced"
+  property string screen: ""
+  property string mic: ""
+  property string system: ""
   property var clips: []
+
+  // Capture sources offered by the backend (read-only, for the UI).
+  property var monitors: []
+  property var mics: []
+  property var speakers: []
 
   signal clipped(string title, string path)
 
@@ -56,17 +64,36 @@ Item {
     if (!path) return
     call(["delete", String(path)], "delete")
   }
+  function listDevices() {
+    call(["devices"], "devices")
+  }
 
   // Preferences are the service's source of truth and are persisted through
   // the `config` command so the poll loop (which reads them back out of the
   // config file) never reverts a change the user just made.
+  function persistPrefs() {
+    call(["config", String(root.duration), root.quality,
+          root.screen, root.mic, root.system], "config")
+  }
   function setDuration(sec) {
     root.duration = sec
-    call(["config", String(sec), root.quality], "config")
+    persistPrefs()
   }
   function setQuality(q) {
     root.quality = q
-    call(["config", String(root.duration), q], "config")
+    persistPrefs()
+  }
+  function setScreen(name) {
+    root.screen = String(name || "")
+    persistPrefs()
+  }
+  function setMic(name) {
+    root.mic = String(name || "")
+    persistPrefs()
+  }
+  function setSystem(name) {
+    root.system = String(name || "")
+    persistPrefs()
   }
 
   // ------------------------------------------------------------- low-level
@@ -89,6 +116,13 @@ Item {
           try {
             var r = JSON.parse(out)
             if (r && r.ok) root.clipped("Clip saved", r.path || "")
+          } catch (e) {}
+        } else if (root.pendingOp === "devices") {
+          try {
+            var d = JSON.parse(out)
+            if (Array.isArray(d.monitors)) root.monitors = d.monitors
+            if (Array.isArray(d.mics)) root.mics = d.mics
+            if (Array.isArray(d.speakers)) root.speakers = d.speakers
           } catch (e) {}
         }
         root.pendingOp = ""
@@ -119,6 +153,9 @@ Item {
           if (!root.prefsLoaded) {
             root.duration = Number(data.duration) || 60
             root.quality = String(data.quality || "balanced")
+            root.screen = String(data.screen || "")
+            root.mic = String(data.mic || "")
+            root.system = String(data.system || "")
             root.prefsLoaded = true
           }
           var list = []
@@ -142,7 +179,10 @@ Item {
     onTriggered: root.refresh()
   }
 
-  Component.onCompleted: root.refresh()
+  Component.onCompleted: {
+    root.refresh()
+    root.listDevices()
+  }
 
   // -------------------------------------------------------------- IPC test
   IpcHandler {

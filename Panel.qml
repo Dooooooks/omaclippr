@@ -47,10 +47,36 @@ Panel {
   readonly property bool active: buffer ? buffer.active : false
   readonly property int duration: buffer ? buffer.duration : setting("defaultDuration", 60)
   readonly property string quality: buffer ? buffer.quality : setting("defaultQuality", "balanced")
+  readonly property string screen: buffer ? buffer.screen : ""
+  readonly property string mic: buffer ? buffer.mic : ""
+  readonly property string system: buffer ? buffer.system : ""
   readonly property var clips: buffer ? buffer.clips : []
 
   readonly property var allowedDurations: [30, 60, 120]
   readonly property var allowedQualities: ["low", "balanced", "high"]
+
+  // Dropdown model for screens: always a "Focused monitor" (empty) entry first.
+  readonly property var screenOptions: {
+    var opts = [{ value: "", label: "Focused monitor" }]
+    var mons = buffer ? buffer.monitors : []
+    for (var i = 0; i < mons.length; i++)
+      opts.push({ value: mons[i].name, label: mons[i].name + "  (" + mons[i].resolution + ")" })
+    return opts
+  }
+  readonly property var micOptions: {
+    var opts = [{ value: "", label: "No microphone" }]
+    var mics = buffer ? buffer.mics : []
+    for (var i = 0; i < mics.length; i++)
+      opts.push({ value: mics[i].name, label: mics[i].label })
+    return opts
+  }
+  readonly property var systemOptions: {
+    var opts = [{ value: "", label: "No system sound" }]
+    var spk = buffer ? buffer.speakers : []
+    for (var i = 0; i < spk.length; i++)
+      opts.push({ value: spk[i].name, label: spk[i].label })
+    return opts
+  }
 
   function start() {
     if (buffer) buffer.start()
@@ -78,6 +104,18 @@ Panel {
   function setQuality(q) {
     if (!buffer || buffer.active) return
     buffer.setQuality(q)
+  }
+  function setScreen(name) {
+    if (!buffer || buffer.active) return
+    buffer.setScreen(name)
+  }
+  function setMic(name) {
+    if (!buffer || buffer.active) return
+    buffer.setMic(name)
+  }
+  function setSystem(name) {
+    if (!buffer || buffer.active) return
+    buffer.setSystem(name)
   }
 
   // ------------------------------------------------------------- formatting
@@ -279,6 +317,48 @@ Panel {
           }
         }
 
+        // ------------------------------------------------------ sources
+        Column {
+          width: parent.width
+          spacing: Style.space(6)
+          opacity: root.active ? 0.45 : 1.0
+          Behavior on opacity { NumberAnimation { duration: 140 } }
+
+          PanelSectionHeader {
+            text: "SOURCES"
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+          }
+
+          Dropdown {
+            width: parent.width
+            label: "Screen"
+            value: root.screen
+            options: root.screenOptions
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            onChanged: function(v) { if (!root.active) root.setScreen(v) }
+          }
+          Dropdown {
+            width: parent.width
+            label: "Microphone"
+            value: root.mic
+            options: root.micOptions
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            onChanged: function(v) { if (!root.active) root.setMic(v) }
+          }
+          Dropdown {
+            width: parent.width
+            label: "System sound"
+            value: root.system
+            options: root.systemOptions
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            onChanged: function(v) { if (!root.active) root.setSystem(v) }
+          }
+        }
+
         // ------------------------------------------------------ clips shelf
         PanelSectionHeader {
           text: "RECENT CLIPS"
@@ -286,7 +366,6 @@ Panel {
           fontFamily: root.fontFamily
           visible: root.clips.length > 0
         }
-
         Column {
           width: parent.width
           spacing: Style.space(4)
