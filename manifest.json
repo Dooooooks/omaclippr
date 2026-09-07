@@ -4,7 +4,7 @@
   "name": "Omaclippr",
   "version": "1.0.0",
   "author": "dooooooks",
-  "description": "Passive instant-replay clip buffer: captures your screen to a RAM-only ring and saves the last moments as a clip on demand, without writing to disk until you ask.",
+  "description": "Background instant replay buffer to capture your best gaming moments and desktop highlights on demand.",
   "homepage": "https://github.com/dooooooks/omaclippr",
   "license": "MIT",
   "kinds": [
