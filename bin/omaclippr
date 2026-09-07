@@ -115,18 +115,19 @@ cmd_devices() {
     '{monitors:$monitors, speakers:$speakers, mics:$mics}'
 }
 
-# Read persisted prefs, filling defaults for any missing key.
+# Read persisted prefs, filling defaults for any missing key. Mic and system
+# sound default to the system's default input/output rather than off.
 load_prefs() {
-  payload='{"duration":60,"quality":"balanced","screen":"","mic":"","system":""}'
+  payload='{"duration":60,"quality":"balanced","screen":"","mic":"default_input","system":"default_output"}'
   if [[ -f "$CONFFILE" ]]; then
     payload=$(jq -c '
       {
         duration: (.duration // 60),
         quality: (.quality // "balanced"),
         screen: (.screen // ""),
-        mic: (.mic // ""),
-        system: (.system // "")
-      }' "$CONFFILE" 2>/dev/null || echo '{"duration":60,"quality":"balanced","screen":"","mic":"","system":""}')
+        mic: ((.mic // "default_input") | if . == "" then "default_input" else . end),
+        system: ((.system // "default_output") | if . == "" then "default_output" else . end)
+      }' "$CONFFILE" 2>/dev/null || echo '{"duration":60,"quality":"balanced","screen":"","mic":"default_input","system":"default_output"}')
   fi
 }
 
@@ -166,11 +167,12 @@ cmd_start() {
     [[ -n "$m" ]] && target="-w $m"
   fi
 
-  # Audio sources: pipe-separated list of everything selected.
+  # Audio sources: pipe-separated list of everything selected. A value of
+  # "none" (the UI's explicit-off choice) is treated as no source.
   local audio=""
   local parts=()
-  [[ -n "$system" ]] && parts+=( "$system" )
-  [[ -n "$mic" ]] && parts+=( "$mic" )
+  [[ -n "$system" && "$system" != "none" ]] && parts+=( "$system" )
+  [[ -n "$mic" && "$mic" != "none" ]] && parts+=( "$mic" )
   if (( ${#parts[@]} > 0 )); then
     audio=$(IFS='|'; echo "${parts[*]}")
   fi
@@ -228,6 +230,7 @@ cmd_stop() {
   done
   kill -KILL "$pid" 2>/dev/null
   rm -f "$PIDFILE" "$SOCKFILE"
+  notify "Buffer stopped"
   echo '{"ok":true}'
 }
 

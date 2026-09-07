@@ -64,14 +64,14 @@ Panel {
     return opts
   }
   readonly property var micOptions: {
-    var opts = [{ value: "", label: "No microphone" }]
+    var opts = [{ value: "none", label: "No microphone" }]
     var mics = buffer ? buffer.mics : []
     for (var i = 0; i < mics.length; i++)
       opts.push({ value: mics[i].name, label: mics[i].label })
     return opts
   }
   readonly property var systemOptions: {
-    var opts = [{ value: "", label: "No system sound" }]
+    var opts = [{ value: "none", label: "No system sound" }]
     var spk = buffer ? buffer.speakers : []
     for (var i = 0; i < spk.length; i++)
       opts.push({ value: spk[i].name, label: spk[i].label })
