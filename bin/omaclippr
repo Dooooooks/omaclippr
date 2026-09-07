@@ -1,0 +1,256 @@
+#!/bin/bash
+# omaclippr — passive instant-replay clip buffer for Omarchy.
+#
+# Wraps gpu-screen-recorder's native replay mode: the buffer lives in RAM
+# (-replay-storage ram), never touches the SSD until you save a clip, and
+# "saving" is a stream-copy mux from the in-memory ring, so it finishes in
+# well under 200 ms with no re-encode.
+#
+# Commands:
+#   omaclippr start  [30|60|120] low|balanced|high
+#   omaclippr stop
+#   omaclippr clip   [seconds]
+#   omaclippr status             -> {"active":true,"duration":60,"quality":"balanced","clips":[...]}
+#   omaclippr clips              -> JSON array of recent clips (newest first)
+#   omaclippr toggle [seg [qual]]
+#
+# State/lock: $RUNTIME_DIR/omaclippr/  (RUNTIME_DIR = $XDG_RUNTIME_DIR or /tmp)
+
+set -u
+
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+STATE_DIR="$RUNTIME_DIR/omaclippr"
+mkdir -p "$STATE_DIR" 2>/dev/null
+
+PIDFILE="$STATE_DIR/pid"
+CONFFILE="$STATE_DIR/config"
+# The unix-domain socket path must stay under ~108 bytes, and $XDG_RUNTIME_DIR
+# can be long, so keep the socket short and stable in /tmp.
+SOCKFILE="/tmp/omaclippr.gsr.sock"
+
+[[ -f ~/.config/user-dirs.dirs ]] && source ~/.config/user-dirs.dirs
+CLIP_DIR="${OMACLIPPR_CLIP_DIR:-${XDG_VIDEOS_DIR:-$HOME/Videos}/Clips}"
+
+# ---------------------------------------------------------------- quality presets
+declare -A QUALITY_FPS QUALITY_CODEC QUALITY_BITRATE QUALITY_DIM
+# low:     720p 30fps ~4Mbps
+# balanced:1080p 60fps ~9Mbps
+# high:    native 60fps ~18Mbps
+QUALITY_FPS[low]=30
+QUALITY_DIM[low]="1280x720"
+QUALITY_BITRATE[low]=4000
+
+QUALITY_FPS[balanced]=60
+QUALITY_DIM[balanced]="1920x1080"
+QUALITY_BITRATE[balanced]=9000
+
+QUALITY_FPS[high]=60
+QUALITY_DIM[high]=""
+QUALITY_BITRATE[high]=18000
+
+qual="${2:-balanced}"
+[[ -v QUALITY_FPS[$qual] ]] || qual="balanced"
+
+focused_monitor() {
+  omarchy-hyprland-monitor-focused 2>/dev/null || echo ""
+}
+
+notify() {
+  omarchy-notification-send -t 2500 "$1" 2>/dev/null || true
+}
+
+gsr_pid() {
+  if [[ -f "$PIDFILE" ]]; then
+    local p
+    p=$(cat "$PIDFILE" 2>/dev/null)
+    if [[ -n "${p:-}" ]] && kill -0 "$p" 2>/dev/null; then
+      echo "$p"
+    fi
+  fi
+}
+
+clip_exists() {
+  [[ -n "${1:-}" && -f "$1" ]]
+}
+
+# ---------------------------------------------------------------- save a clip
+save_clip() {
+  local seconds="${1:-}"
+  local pid sock
+  pid=$(gsr_pid)
+  [[ -n "$pid" ]] || { echo '{"ok":false,"error":"not running"}'; return 1; }
+  sock="$SOCKFILE"
+  [[ -S "$sock" ]] || { echo '{"ok":false,"error":"no ipc socket"}'; return 1; }
+
+  local path
+  if [[ -n "$seconds" ]]; then
+    path=$(gsr-cli -ipc "$sock" save-replay "$seconds" 2>/dev/null | tr -d '\r\n')
+  else
+    path=$(gsr-cli -ipc "$sock" save-replay 2>/dev/null | tr -d '\r\n')
+  fi
+  path="${path#"${path%%[![:space:]]*}"}"
+  path="${path%"${path##*[![:space:]]}"}"
+
+  if clip_exists "$path"; then
+    notify "Clip saved: ${path##*/}"
+    echo "{\"ok\":true,\"path\":\"$path\"}"
+  else
+    echo "{\"ok\":false,\"error\":\"save failed\"}"
+    return 1
+  fi
+}
+
+# ---------------------------------------------------------------- start
+cmd_start() {
+  local duration="${1:-60}"
+  shift 2>/dev/null || true
+  local q="${1:-balanced}"
+  local pid
+  pid=$(gsr_pid)
+  if [[ -n "$pid" ]]; then
+    # Already running: hot-update duration/quality by restarting only when they differ.
+    echo '{"ok":true,"already":true}'
+    return 0
+  fi
+
+  mkdir -p "$CLIP_DIR" 2>/dev/null || {
+    notify "Could not create $CLIP_DIR"
+    echo '{"ok":false,"error":"clips dir"}'
+    return 1
+  }
+
+  local monitor
+  monitor=$(focused_monitor)
+  local target="-w screen"
+  [[ -n "$monitor" ]] && target="-w $monitor"
+
+  local fps="${QUALITY_FPS[$q]}"
+  local bitrate="${QUALITY_BITRATE[$q]}"
+  local dim="${QUALITY_DIM[$q]}"
+
+  local args=( $target -f "$fps" -k auto -c mp4 -bm cbr -q "$bitrate" -fm cfr )
+  [[ -n "$dim" ]] && args+=( -s "$dim" )
+
+  args+=( -r "$duration" -replay-storage ram -o "$CLIP_DIR" -ipc "$SOCKFILE" )
+
+  setsid gpu-screen-recorder "${args[@]}" >/dev/null 2>&1 &
+  pid=$!
+
+  # Wait for the IPC socket to appear so the next clip lands cleanly.
+  local n=0
+  while ((n < 60)); do
+    kill -0 "$pid" 2>/dev/null || break
+    [[ -S "$SOCKFILE" ]] && break
+    sleep 0.1
+    ((n++))
+  done
+
+  if kill -0 "$pid" 2>/dev/null; then
+    echo "$pid" >"$PIDFILE"
+    echo "{\"duration\":$duration,\"quality\":\"$q\"}" >"$CONFFILE"
+    notify "Buffer active · ${duration}s · $q"
+    echo "{\"ok\":true,\"pid\":$pid,\"duration\":$duration,\"quality\":\"$q\"}"
+  else
+    rm -f "$PIDFILE" "$SOCKFILE"
+    notify "Buffer failed to start"
+    echo '{"ok":false,"error":"failed to start"}'
+    return 1
+  fi
+}
+
+# ---------------------------------------------------------------- stop
+cmd_stop() {
+  local pid
+  pid=$(gsr_pid)
+  if [[ -z "$pid" ]]; then
+    [[ -f "$PIDFILE" ]] && rm -f "$PIDFILE"
+    echo '{"ok":true,"already_stopped":true}'
+    return 0
+  fi
+  kill -INT "$pid" 2>/dev/null
+  local n=0
+  while ((n < 40)); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.05
+    ((n++))
+  done
+  kill -KILL "$pid" 2>/dev/null
+  rm -f "$PIDFILE" "$SOCKFILE"
+  echo '{"ok":true}'
+}
+
+# ---------------------------------------------------------------- clip
+cmd_clip() {
+  save_clip "${1:-}"
+}
+
+# ---------------------------------------------------------------- status / clips
+# Emits one line per clip: <path><TAB><epoch-seconds>, newest first.
+list_clips() {
+  [[ -d "$CLIP_DIR" ]] || return 0
+  find "$CLIP_DIR" -maxdepth 1 -type f \( -iname '*.mp4' -o -iname '*.mkv' \) -printf '%p\t%T@\n' \
+    2>/dev/null | sort -t$'\t' -k2 -rn | head -5
+}
+
+cmd_status() {
+  local pid active config
+  pid=$(gsr_pid)
+  active="false"
+  local duration=60 q=balanced
+  if [[ -n "$pid" ]]; then
+    active="true"
+  fi
+  # Preferences are persisted in CONFFILE so they survive UI changes, shell
+  # restarts, and the poll loop reading status back in.
+  if [[ -f "$CONFFILE" ]]; then
+    duration=$(jq -r '.duration' "$CONFFILE" 2>/dev/null || echo 60)
+    q=$(jq -r '.quality' "$CONFFILE" 2>/dev/null || echo balanced)
+  fi
+
+  local clips_json="["
+  local first=1
+  while IFS=$'\t' read -r path ts; do
+    [[ -n "$path" ]] || continue
+    [[ $first -eq 0 ]] && clips_json+=","
+    local pquoted tquoted
+    pquoted=$(jq -Rn --arg v "$path" '$v')
+    tquoted=$(printf '%.0f' "$ts" 2>/dev/null || echo 0)
+    clips_json+="{\"path\":${pquoted},\"ts\":${tquoted}}"
+    first=0
+  done < <(list_clips)
+  clips_json+="]"
+
+  jq -n \
+    --argjson active "$( [[ "$active" == "true" ]] && echo true || echo false )" \
+    --arg duration "$duration" \
+    --arg quality "$q" \
+    --argjson clips "$clips_json" \
+    '{active:$active,duration:$duration,quality:$quality,clips:$clips}'
+}
+
+# ---------------------------------------------------------------- dispatch
+cmd_config() {
+  local d="${1:-60}" q="${2:-balanced}"
+  case "$d" in 30|60|120) ;; *) d=60 ;; esac
+  case "$q" in low|balanced|high) ;; *) q=balanced ;; esac
+  echo "{\"duration\":$d,\"quality\":\"$q\"}" >"$CONFFILE"
+  echo "{\"ok\":true,\"duration\":$d,\"quality\":\"$q\"}"
+}
+
+case "${1:-}" in
+  start)  shift; cmd_start "${1:-60}" "${2:-balanced}" ;;
+  stop)   cmd_stop ;;
+  clip)   shift; cmd_clip "${1:-}" ;;
+  toggle) shift
+    if [[ -n "$(gsr_pid)" ]]; then cmd_stop; else cmd_start "${1:-60}" "${2:-balanced}"; fi ;;
+  status) cmd_status ;;
+  config) shift; cmd_config "${1:-}" "${2:-}" ;;
+  clips)  list_clips | while IFS=$'\t' read -r path ts; do
+            printf '%s\n' "$path"
+          done ;;
+  --clip) cmd_clip "${2:-}" ;;
+  --start) cmd_start "${2:-60}" "${3:-balanced}" ;;
+  --stop)  cmd_stop ;;
+  --toggle) if [[ -n "$(gsr_pid)" ]]; then cmd_stop; else cmd_start "${2:-60}" "${3:-balanced}"; fi ;;
+  *)      echo "usage: omaclippr {start|stop|clip|toggle|status|clips|--clip|--start|--stop|--toggle}" >&2; exit 1 ;;
+esac

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "id": "dooooooks.omaclippr",
+  "name": "Omaclippr",
+  "version": "1.0.0",
+  "author": "dooooooks",
+  "description": "Passive instant-replay clip buffer: captures your screen to a RAM-only ring and saves the last moments as a clip on demand, without writing to disk until you ask.",
+  "homepage": "https://github.com/dooooooks/omaclippr",
+  "license": "MIT",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Omaclippr",
+    "description": "Instant replay buffer with a status pill, clip trigger, and recent clip shelf.",
+    "category": "Media",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "defaultDuration": 60,
+      "defaultQuality": "balanced"
+    },
+    "schema": [
+      {
+        "key": "defaultDuration",
+        "type": "enum",
+        "label": "Default replay length",
+        "options": ["30", "60", "120"],
+        "defaultValue": "60",
+        "description": "Seconds of footage kept in the RAM ring buffer. Longer clips use proportionally more memory."
+      },
+      {
+        "key": "defaultQuality",
+        "type": "enum",
+        "label": "Default quality",
+        "options": ["low", "balanced", "high"],
+        "defaultValue": "balanced",
+        "description": "Low (720p 30fps ~4 Mbps), Balanced (1080p 60fps ~9 Mbps), or High (native 60fps ~18 Mbps)."
+      }
+    ]
+  }
+}
