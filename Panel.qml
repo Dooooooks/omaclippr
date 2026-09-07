@@ -66,14 +66,12 @@ Panel {
   }
 
   function setDuration(sec) {
-    if (!buffer) return
+    if (!buffer || buffer.active) return
     buffer.setDuration(sec)
-    if (buffer.active) buffer.start(sec, quality)
   }
   function setQuality(q) {
-    if (!buffer) return
+    if (!buffer || buffer.active) return
     buffer.setQuality(q)
-    if (buffer.active) buffer.start(duration, q)
   }
 
   // ------------------------------------------------------------- formatting
@@ -207,56 +205,70 @@ Panel {
         }
 
         // ------------------------------------------------------ duration
-        PanelSectionHeader {
-          text: "REPLAY LENGTH"
-          foreground: root.foreground
-          fontFamily: root.fontFamily
-        }
-
-        Row {
+        Column {
           width: parent.width
           spacing: Style.space(6)
-          Repeater {
-            model: root.allowedDurations
-            delegate: Button {
-              required property var modelData
-              text: modelData + "s"
-              foreground: root.foreground
-              accent: Color.accent
-              selected: modelData === root.duration
-              width: (parent.width - Style.space(6) * (root.allowedDurations.length - 1))
-                     / root.allowedDurations.length
-              onClicked: root.setDuration(modelData)
+          opacity: root.active ? 0.45 : 1.0
+          Behavior on opacity { NumberAnimation { duration: 140 } }
+
+          PanelSectionHeader {
+            text: "REPLAY LENGTH"
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+          }
+
+          Row {
+            width: parent.width
+            spacing: Style.space(6)
+            Repeater {
+              model: root.allowedDurations
+              delegate: Button {
+                required property var modelData
+                text: modelData + "s"
+                foreground: root.foreground
+                accent: Color.accent
+                selected: modelData === root.duration
+                width: (parent.width - Style.space(6) * (root.allowedDurations.length - 1))
+                       / root.allowedDurations.length
+                onClicked: if (!root.active) root.setDuration(modelData)
+              }
             }
           }
         }
 
         // ------------------------------------------------------ quality
-        PanelSectionHeader {
-          text: "QUALITY"
-          foreground: root.foreground
-          fontFamily: root.fontFamily
-        }
-
-        Row {
+        Column {
           width: parent.width
           spacing: Style.space(6)
-          Repeater {
-            model: root.allowedQualities
-            delegate: Button {
-              required property var modelData
-              readonly property string shown: {
-                if (modelData === "low") return "Low"
-                if (modelData === "balanced") return "Balanced"
-                return "High"
+          opacity: root.active ? 0.45 : 1.0
+          Behavior on opacity { NumberAnimation { duration: 140 } }
+
+          PanelSectionHeader {
+            text: "QUALITY"
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+          }
+
+          Row {
+            width: parent.width
+            spacing: Style.space(6)
+            Repeater {
+              model: root.allowedQualities
+              delegate: Button {
+                required property var modelData
+                readonly property string shown: {
+                  if (modelData === "low") return "Low"
+                  if (modelData === "balanced") return "Balanced"
+                  return "High"
+                }
+                text: shown
+                foreground: root.foreground
+                accent: Color.accent
+                selected: modelData === root.quality
+                width: (parent.width - Style.space(6) * (root.allowedQualities.length - 1))
+                       / root.allowedQualities.length
+                onClicked: if (!root.active) root.setQuality(modelData)
               }
-              text: shown
-              foreground: root.foreground
-              accent: Color.accent
-              selected: modelData === root.quality
-              width: (parent.width - Style.space(6) * (root.allowedQualities.length - 1))
-                     / root.allowedQualities.length
-              onClicked: root.setQuality(modelData)
             }
           }
         }
