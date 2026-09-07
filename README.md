@@ -46,7 +46,7 @@ form: `o.bind(modifiers, description, command)`.
 
 ```lua
 -- start/stop buffering
-o.bind("SUPER + ALT + R", "Omaclippr: toggle buffer",
+o.bind("SUPER + SHIFT + R", "Omaclippr: toggle buffer",
        os.getenv("HOME") .. "/.config/omarchy/plugins/dooooooks.omaclippr/bin/omaclippr --toggle")
 
 -- save the active buffer
