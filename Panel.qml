@@ -64,6 +64,12 @@ Panel {
   function clipNow() {
     if (buffer) buffer.clip("")
   }
+  function editClip(path) {
+    Quickshell.execDetached(["omacut", String(path)])
+  }
+  function deleteClip(path) {
+    if (buffer) buffer.deleteClip(path)
+  }
 
   function setDuration(sec) {
     if (!buffer || buffer.active) return
@@ -84,6 +90,93 @@ Panel {
     var t = Number(ts || 0)
     if (!t) return ""
     return Qt.formatDateTime(new Date(t * 1000), "MMM d · HH:mm")
+  }
+
+  // One row in the recent-clips shelf. Delete is a two-step confirm: the first
+  // click arms the button, the second (within the window) actually deletes.
+  component ClipRow: Row {
+    id: clipRow
+    required property var modelData
+    property bool armed: false
+
+    width: parent.width
+    height: clipText.implicitHeight + Style.space(8)
+    spacing: Style.space(4)
+
+    Text {
+      id: clipText
+      textFormat: Text.PlainText
+      text: root.clipName(clipRow.modelData.path)
+      color: root.foreground
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.body
+      elide: Text.ElideMiddle
+      width: parent.width
+             - playBtn.width - editBtn.width - folderBtn.width
+             - pathBtn.width - deleteBtn.width
+             - Style.space(4) * 5
+      anchors.verticalCenter: parent.verticalCenter
+    }
+
+    Button {
+      id: playBtn
+      iconText: "\uF04B"
+      foreground: root.foreground
+      tooltipText: "Play"
+      anchors.verticalCenter: parent.verticalCenter
+      onClicked: Quickshell.execDetached(["xdg-open", String(clipRow.modelData.path)])
+    }
+    Button {
+      id: editBtn
+      iconText: "\uF0C4"
+      foreground: root.foreground
+      tooltipText: "Edit in Omacut"
+      anchors.verticalCenter: parent.verticalCenter
+      onClicked: root.editClip(String(clipRow.modelData.path))
+    }
+    Button {
+      id: folderBtn
+      iconText: "\uF07B"
+      foreground: root.foreground
+      tooltipText: "Open folder"
+      anchors.verticalCenter: parent.verticalCenter
+      onClicked: {
+        var p = String(clipRow.modelData.path)
+        var i = p.lastIndexOf("/")
+        var dir = i >= 0 ? p.substring(0, i) : p
+        Quickshell.execDetached(["xdg-open", dir])
+      }
+    }
+    Button {
+      id: pathBtn
+      iconText: "\uF0C5"
+      foreground: root.foreground
+      tooltipText: "Copy path"
+      anchors.verticalCenter: parent.verticalCenter
+      onClicked: Quickshell.execDetached(["wl-copy", String(clipRow.modelData.path)])
+    }
+    Button {
+      id: deleteBtn
+      iconText: clipRow.armed ? "\uF00D" : "\uF1F8"
+      foreground: clipRow.armed ? Color.accent : root.foreground
+      tooltipText: clipRow.armed ? "Click again to delete" : "Delete"
+      anchors.verticalCenter: parent.verticalCenter
+      onClicked: {
+        if (clipRow.armed) {
+          clipRow.armed = false
+          root.deleteClip(String(clipRow.modelData.path))
+        } else {
+          clipRow.armed = true
+          disarmTimer.restart()
+        }
+      }
+    }
+
+    Timer {
+      id: disarmTimer
+      interval: 3000
+      onTriggered: clipRow.armed = false
+    }
   }
 
   // ------------------------------------------------------------- bar button
@@ -287,57 +380,8 @@ Panel {
           visible: root.clips.length > 0
           Repeater {
             model: root.clips
-            delegate: Row {
+            delegate: ClipRow {
               required property var modelData
-              width: parent.width
-              height: clipText.implicitHeight + Style.space(8)
-              spacing: Style.space(6)
-
-              Text {
-                id: clipText
-                textFormat: Text.PlainText
-                text: root.clipName(modelData.path)
-                color: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-                elide: Text.ElideMiddle
-                width: parent.width
-                       - playBtn.width - folderBtn.width - pathBtn.width
-                       - Style.space(6) * 3
-                anchors.verticalCenter: parent.verticalCenter
-              }
-
-              Button {
-                id: playBtn
-                iconText: "\uF04B"
-                foreground: root.foreground
-                tooltipText: "Play"
-                anchors.verticalCenter: parent.verticalCenter
-                onClicked: Quickshell.execDetached(["xdg-open", String(modelData.path)])
-              }
-              Button {
-                id: folderBtn
-                iconText: "\uF07B"
-                foreground: root.foreground
-                tooltipText: "Open folder"
-                anchors.verticalCenter: parent.verticalCenter
-                onClicked: {
-                  var p = String(modelData.path)
-                  var i = p.lastIndexOf("/")
-                  var dir = i >= 0 ? p.substring(0, i) : p
-                  Quickshell.execDetached(["xdg-open", dir])
-                }
-              }
-              Button {
-                id: pathBtn
-                iconText: "\uF0C5"
-                foreground: root.foreground
-                tooltipText: "Copy path"
-                anchors.verticalCenter: parent.verticalCenter
-                onClicked: {
-                  Quickshell.execDetached(["wl-copy", String(modelData.path)])
-                }
-              }
             }
           }
         }
