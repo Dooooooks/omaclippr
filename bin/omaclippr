@@ -184,6 +184,21 @@ cmd_clip() {
   save_clip "${1:-}"
 }
 
+# ---------------------------------------------------------------- delete
+cmd_delete() {
+  local path="${1:-}"
+  # Only ever unlink files inside the clips directory.
+  local real realdir
+  real=$(realpath -m "$path" 2>/dev/null) || { echo '{"ok":false,"error":"bad path"}'; return 1; }
+  realdir=$(realpath -m "$CLIP_DIR" 2>/dev/null)
+  case "$real" in
+    "$realdir"/*) ;;
+    *) echo '{"ok":false,"error":"refusing to delete outside clips dir"}'; return 1 ;;
+  esac
+  [[ -f "$real" ]] || { echo '{"ok":false,"error":"no such file"}'; return 1; }
+  rm -f -- "$real" && echo "{\"ok\":true,\"path\":\"$real\"}" || echo '{"ok":false,"error":"delete failed"}'
+}
+
 # ---------------------------------------------------------------- status / clips
 # Emits one line per clip: <path><TAB><epoch-seconds>, newest first.
 list_clips() {
@@ -241,6 +256,7 @@ case "${1:-}" in
   start)  shift; cmd_start "${1:-60}" "${2:-balanced}" ;;
   stop)   cmd_stop ;;
   clip)   shift; cmd_clip "${1:-}" ;;
+  delete) shift; cmd_delete "${1:-}" ;;
   toggle) shift
     if [[ -n "$(gsr_pid)" ]]; then cmd_stop; else cmd_start "${1:-60}" "${2:-balanced}"; fi ;;
   status) cmd_status ;;

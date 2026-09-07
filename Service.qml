@@ -52,6 +52,10 @@ Item {
     if (seconds) args.push(String(seconds))
     call(args, "clip")
   }
+  function deleteClip(path) {
+    if (!path) return
+    call(["delete", String(path)], "delete")
+  }
 
   // Preferences are the service's source of truth and are persisted through
   // the `config` command so the poll loop (which reads them back out of the
