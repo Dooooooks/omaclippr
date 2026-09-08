@@ -59,6 +59,13 @@ notify() {
   omarchy-notification-send -t 2500 "$1" 2>/dev/null || true
 }
 
+# Tell Omarchy's built-in ScreenRecording bar indicator to re-check its state.
+# It tracks gpu-screen-recorder via pgrep, so it must be poked whenever the
+# buffer starts or stops, exactly like omarchy-capture-screenrecording does.
+sync_indicator() {
+  omarchy-shell -q omarchy.indicators refresh 2>/dev/null || true
+}
+
 gsr_pid() {
   if [[ -f "$PIDFILE" ]]; then
     local p
@@ -203,10 +210,12 @@ cmd_start() {
     echo "$pid" >"$PIDFILE"
     echo "$payload" >"$CONFFILE"
     notify "Buffer active · ${duration}s · $q"
+    sync_indicator
     echo "{\"ok\":true,\"pid\":$pid,\"duration\":$duration,\"quality\":\"$q\"}"
   else
     rm -f "$PIDFILE" "$SOCKFILE"
     notify "Buffer failed to start"
+    sync_indicator
     echo '{"ok":false,"error":"failed to start"}'
     return 1
   fi
@@ -218,6 +227,7 @@ cmd_stop() {
   pid=$(gsr_pid)
   if [[ -z "$pid" ]]; then
     [[ -f "$PIDFILE" ]] && rm -f "$PIDFILE"
+    sync_indicator
     echo '{"ok":true,"already_stopped":true}'
     return 0
   fi
@@ -231,6 +241,7 @@ cmd_stop() {
   kill -KILL "$pid" 2>/dev/null
   rm -f "$PIDFILE" "$SOCKFILE"
   notify "Buffer stopped"
+  sync_indicator
   echo '{"ok":true}'
 }
 
