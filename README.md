@@ -63,17 +63,7 @@ Other CLI flags: `--start`, `--stop`.
 
 ## Memory usage while buffering
 
-The buffer is a fixed-length RAM ring, so memory is a hard ceiling that never
-grows with uptime. Approximate footprint (encoded ring only, from
-`duration × bitrate`):
-
-| Quality | Bitrate | 30s buffer | 60s buffer | 120s buffer |
-|---------|---------|-----------|-----------|-------------|
-| Low (720p30) | ~4 Mbps | ~15 MB | ~30 MB | ~60 MB |
-| Balanced (1080p60) | ~9 Mbps | ~34 MB | ~67 MB | ~135 MB |
-| High (native 60) | ~18 Mbps | ~67 MB | ~135 MB | ~270 MB |
-
-Add roughly **50–100 MB** of encoder/GPU-staging overhead to any figure above,
+Add roughly **400-500 MB** of encoder/GPU-staging overhead to any figure above,
 so the default (Balanced / 60s) typically lands around **120–170 MB** total.
 The exact number varies with codec choice, motion, and driver, but the buffer
 itself is strictly bounded — leaving it on for a day costs the same as the
