@@ -39,12 +39,17 @@ omarchy plugin add https://github.com/Dooooooks/omaclippr.git --enable
 The clip and buffer controls are plain CLI flags, so you can bind them in
 Hyprland (or any WM) independently of the panel.
 
-Bind the buffer toggle to `SUPER + ALT + R` and the clip trigger to `SUPER + R`.
+Bind the buffer toggle to `SUPER + SHIFT + R` and the clip trigger to `SUPER + R`.
+You can also summon the panel with `SUPER + ALT + R`.
 
 Omarchy uses Lua for Hyprland bindings (`~/.config/hypr/bindings.lua`), in this
 form: `o.bind(modifiers, description, command)`.
 
 ```lua
+-- open the Omaclippr panel
+o.bind("SUPER + ALT + R", "Omaclippr: open panel",
+       "omarchy-shell shell summon dooooooks.omaclippr '{}'")
+
 -- start/stop buffering
 o.bind("SUPER + SHIFT + R", "Omaclippr: toggle buffer",
        os.getenv("HOME") .. "/.config/omarchy/plugins/dooooooks.omaclippr/bin/omaclippr --toggle")
